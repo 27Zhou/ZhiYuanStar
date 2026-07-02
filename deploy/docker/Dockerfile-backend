@@ -1,0 +1,20 @@
+# 后端Dockerfile
+FROM eclipse-temurin:24-jdk-alpine
+
+LABEL maintainer="gaokao-ai"
+
+WORKDIR /app
+
+# 设置时区
+RUN apk add --no-cache tzdata && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
+
+# 复制jar包
+COPY target/*.jar app.jar
+
+# 暴露端口
+EXPOSE 8080
+
+# 启动应用
+ENTRYPOINT ["java", "-jar", "app.jar"]

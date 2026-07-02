@@ -1,0 +1,63 @@
+# =====================================================
+# 生产环境配置
+# =====================================================
+
+# 数据源配置
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:gaokao_ai}?useUnicode=true&characterEncoding=utf-8&useSSL=true&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:}
+    # HikariCP连接池配置（生产环境优化）
+    hikari:
+      minimum-idle: 10
+      maximum-pool-size: 50
+      idle-timeout: 300000
+      max-lifetime: 1800000
+      connection-timeout: 30000
+      connection-test-query: SELECT 1
+
+  # Redis配置
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      timeout: 10000
+      lettuce:
+        pool:
+          max-active: 16
+          max-wait: -1
+          max-idle: 8
+          min-idle: 4
+
+# 服务器配置（生产环境）
+server:
+  port: ${SERVER_PORT:8080}
+  tomcat:
+    max-threads: 200
+    accept-count: 100
+    max-connections: 10000
+
+# 日志级别（生产环境精简）
+logging:
+  level:
+    com.gaokao.ai: info
+    org.springframework: warn
+    org.springframework.web: warn
+    com.baomidou: warn
+    org.springframework.security: warn
+
+# Swagger配置（生产环境关闭）
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+
+# JWT配置（生产环境必须使用强密钥）
+jwt:
+  secret: ${JWT_SECRET:prod-secret-key-must-be-changed-in-production-environment-very-long}
+  expiration: 86400000  # 24小时

@@ -1,0 +1,8 @@
+{
+  "modelVersion": "5.0.0",
+  "description": "智选未来 - 高考志愿辅助填报系统",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.19"
+  }
+}
