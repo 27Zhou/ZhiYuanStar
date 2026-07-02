@@ -2,7 +2,13 @@
 智选未来 - 爬虫主入口
 """
 import sys
+import io
+import argparse
 from pathlib import Path
+
+# Windows终端UTF-8支持
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # 将项目根目录加入Python路径
 sys.path.insert(0, str(Path(__file__).parent))
@@ -23,24 +29,54 @@ def check_environment():
     logger.info("=" * 50)
 
 
+def run_school():
+    """运行高校数据采集"""
+    from crawler.school_crawler import SchoolCrawler
+
+    logger.info("启动高校数据采集任务...")
+    crawler = SchoolCrawler()
+
+    try:
+        data = crawler.start()
+        logger.info(f"高校数据采集完成，共获取 {len(data)} 所高校")
+    except Exception as e:
+        logger.error(f"高校数据采集失败: {e}")
+    finally:
+        crawler.cleanup()
+
+
 def main():
     """主函数"""
+    parser = argparse.ArgumentParser(description="智选未来 - 高考数据爬虫系统")
+    parser.add_argument(
+        "task",
+        choices=["school", "major", "score", "all"],
+        help="采集任务: school=高校, major=专业, score=录取分数, all=全部",
+    )
+    parser.add_argument(
+        "--check-env",
+        action="store_true",
+        help="仅检查环境，不执行采集",
+    )
+
+    args = parser.parse_args()
+
     check_environment()
 
-    # TODO: 在此注册和启动爬虫任务
-    #
-    # 示例:
-    # from crawler.school_crawler import SchoolCrawler
-    # from pipeline.db_pipeline import db_pipeline
-    #
-    # crawler = SchoolCrawler()
-    # data = crawler.start()
-    # for item in data:
-    #     db_pipeline.process(item, table="school")
-    # db_pipeline.flush()
+    if args.check_env:
+        logger.info("环境检查完成")
+        return
 
-    logger.info("爬虫框架初始化完成，等待注册具体爬虫任务...")
-    logger.info("提示: 请在 crawler/ 目录下创建具体爬虫类，继承 BaseCrawler")
+    if args.task == "school":
+        run_school()
+    elif args.task == "major":
+        logger.info("专业采集模块待开发...")
+    elif args.task == "score":
+        logger.info("录取分数采集模块待开发...")
+    elif args.task == "all":
+        run_school()
+        logger.info("专业采集模块待开发...")
+        logger.info("录取分数采集模块待开发...")
 
 
 if __name__ == "__main__":
