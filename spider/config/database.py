@@ -10,7 +10,7 @@ class DatabaseConfig:
     host: str = "localhost"
     port: int = 3306
     user: str = "root"
-    password: str = ""
+    password: str = "060427"
     database: str = "gaokao_ai"
     charset: str = "utf8mb4"
     pool_size: int = 10

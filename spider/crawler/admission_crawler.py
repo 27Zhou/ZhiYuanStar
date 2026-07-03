@@ -1,38 +1,37 @@
 """
-历年录取数据采集模块
-数据来源：阳光高考平台、各省教育考试院
+历年录取数据采集模块（重构版）
+采用Adapter架构，Crawler只负责调度
 """
 import json
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 from crawler.base import BaseCrawler
 from parser.admission_parser import AdmissionParser
 from pipeline.admission_pipeline import AdmissionPipeline
+from adapter.registry import adapter_registry
+from adapter.sunshine import SunshineAdapter
+from adapter.university import UniversityAdapter
+from adapter.province import ProvinceAdapter
 
 
 class AdmissionCrawler(BaseCrawler):
-    """历年录取数据采集器"""
+    """历年录取数据采集器（调度器）"""
 
-    # 阳光高考录取数据API
-    API_URL = "https://api.gaokao.cn/api/school/provinceScore"
-    # 备用数据源
-    BACKUP_URL = "https://static-data.gaokao.cn/www/2.0/school/score_list.json"
-
-    # 采集年份范围
-    YEAR_RANGE = [2020, 2021, 2022, 2023, 2024, 2025]
-
-    # 31个省份ID
-    PROVINCE_IDS = list(range(1, 32))
-
-    # 断点续爬文件
     CHECKPOINT_FILE = "data/admission_checkpoint.json"
+    YEAR_RANGE = [2020, 2021, 2022, 2023, 2024, 2025]
+    PROVINCE_IDS = list(range(1, 32))
 
     def __init__(self):
         super().__init__(name="admission_crawler")
         self.parser = AdmissionParser()
         self.pipeline = AdmissionPipeline()
         self.checkpoint_path = Path(self.config.project_root) / self.CHECKPOINT_FILE
+
+        # 注册数据源适配器（按优先级）
+        adapter_registry.register("admission", SunshineAdapter())
+        adapter_registry.register("admission", UniversityAdapter())
+        adapter_registry.register("admission", ProvinceAdapter())
 
     def _load_checkpoint(self) -> Dict[str, Any]:
         """加载断点信息"""
@@ -48,12 +47,7 @@ class AdmissionCrawler(BaseCrawler):
                     return data
             except Exception as e:
                 self.logger.warning(f"加载断点失败: {e}")
-        return {
-            "completed": 0,
-            "current_year": None,
-            "current_province": None,
-            "finished_keys": [],
-        }
+        return {"completed": 0, "finished_keys": []}
 
     def _save_checkpoint(self, checkpoint: Dict[str, Any]):
         """保存断点信息"""
@@ -65,7 +59,7 @@ class AdmissionCrawler(BaseCrawler):
             self.logger.warning(f"保存断点失败: {e}")
 
     def crawl(self, **kwargs) -> List[Dict[str, Any]]:
-        """执行历年录取数据采集"""
+        """执行历年录取数据采集（调度Adapter）"""
         all_scores = []
         checkpoint = self._load_checkpoint()
         finished_keys = set(checkpoint.get("finished_keys", []))
@@ -82,7 +76,11 @@ class AdmissionCrawler(BaseCrawler):
 
                 self.logger.info(f"采集 {year} 年 省份ID={province_id} 录取数据...")
 
-                scores = self._crawl_by_year_province(year, province_id)
+                # 通过Adapter注册表获取数据（自动切换数据源）
+                scores = adapter_registry.execute(
+                    "admission", "fetch_admission_scores",
+                    year=year, province_id=province_id
+                )
 
                 if scores:
                     # 解析并保存
@@ -117,67 +115,6 @@ class AdmissionCrawler(BaseCrawler):
 
         self.logger.info(f"录取数据采集完成，共获取 {len(all_scores)} 条，成功保存 {saved_count} 条")
         return all_scores
-
-    def _crawl_by_year_province(self, year: int, province_id: int) -> List[Dict[str, Any]]:
-        """按年份和省份采集录取数据"""
-        all_scores = []
-
-        for page in range(1, 200):
-            try:
-                params = {
-                    "year": year,
-                    "province_id": province_id,
-                    "page": page,
-                    "size": 50,
-                }
-
-                data = self.fetch_json(self.API_URL, params=params)
-
-                if not data:
-                    break
-
-                score_list = data.get("data", {}).get("list", [])
-                if not score_list:
-                    break
-
-                # 给每条数据附加年份和省份信息
-                for item in score_list:
-                    item["_year"] = year
-                    item["_province_id"] = province_id
-
-                all_scores.extend(score_list)
-
-                if len(score_list) < params["size"]:
-                    break
-
-            except Exception as e:
-                self.logger.warning(f"API第 {page} 页获取失败: {e}")
-                break
-
-        return all_scores
-
-    def _crawl_from_backup(self, year: int, province_id: int) -> List[Dict[str, Any]]:
-        """从备用数据源获取录取数据"""
-        try:
-            params = {"year": year, "province_id": province_id}
-            content = self.fetch_page(self.BACKUP_URL, params=params, encoding="utf-8")
-            if not content:
-                return []
-
-            data = json.loads(content)
-            score_list = data.get("data", data) if isinstance(data, dict) else data
-
-            if isinstance(score_list, list):
-                for item in score_list:
-                    item["_year"] = year
-                    item["_province_id"] = province_id
-                return score_list
-
-            return []
-
-        except Exception as e:
-            self.logger.error(f"备用数据源获取失败: {e}")
-            return []
 
     def parse(self, content: str, **kwargs) -> List[Dict[str, Any]]:
         """解析内容（由parser处理）"""
