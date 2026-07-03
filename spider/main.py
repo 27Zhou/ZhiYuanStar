@@ -61,6 +61,22 @@ def run_major():
         crawler.cleanup()
 
 
+def run_admission():
+    """运行历年录取数据采集"""
+    from crawler.admission_crawler import AdmissionCrawler
+
+    logger.info("启动历年录取数据采集任务...")
+    crawler = AdmissionCrawler()
+
+    try:
+        data = crawler.start()
+        logger.info(f"录取数据采集完成，共获取 {len(data)} 条数据")
+    except Exception as e:
+        logger.error(f"录取数据采集失败: {e}")
+    finally:
+        crawler.cleanup()
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description="智选未来 - 高考数据爬虫系统")
@@ -88,11 +104,11 @@ def main():
     elif args.task == "major":
         run_major()
     elif args.task == "score":
-        logger.info("录取分数采集模块待开发...")
+        run_admission()
     elif args.task == "all":
         run_school()
         run_major()
-        logger.info("录取分数采集模块待开发...")
+        run_admission()
 
 
 if __name__ == "__main__":
