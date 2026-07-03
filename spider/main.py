@@ -45,6 +45,22 @@ def run_school():
         crawler.cleanup()
 
 
+def run_major():
+    """运行专业数据采集"""
+    from crawler.major_crawler import MajorCrawler
+
+    logger.info("启动专业数据采集任务...")
+    crawler = MajorCrawler()
+
+    try:
+        data = crawler.start()
+        logger.info(f"专业数据采集完成，共获取 {len(data)} 个专业")
+    except Exception as e:
+        logger.error(f"专业数据采集失败: {e}")
+    finally:
+        crawler.cleanup()
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description="智选未来 - 高考数据爬虫系统")
@@ -70,12 +86,12 @@ def main():
     if args.task == "school":
         run_school()
     elif args.task == "major":
-        logger.info("专业采集模块待开发...")
+        run_major()
     elif args.task == "score":
         logger.info("录取分数采集模块待开发...")
     elif args.task == "all":
         run_school()
-        logger.info("专业采集模块待开发...")
+        run_major()
         logger.info("录取分数采集模块待开发...")
 
 
