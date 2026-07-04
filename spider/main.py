@@ -85,8 +85,9 @@ def print_result(task: str, result: ImportResult):
     print("=" * 50)
     print(f"📂 读取文件数量: {result.files_read}")
     print(f"✅ 解析成功数量: {result.parsed}")
-    print(f"💾 插入数据库数量: {result.inserted}")
-    print(f"🔁 重复数量: {result.duplicated}")
+    print(f"💾 新增插入数量: {result.inserted}")
+    print(f"🔄 更新数量: {result.updated}")
+    print(f"🔁 无变化数量: {result.duplicated}")
     print(f"❌ 失败数量: {result.failed}")
     print("=" * 50)
 
@@ -143,6 +144,7 @@ def run_import(task: str, data_dir: str, table: str):
 
     # 合并结果
     result.inserted = import_result.inserted
+    result.updated = import_result.updated
     result.duplicated = import_result.duplicated
     result.failed = import_result.failed
     result.errors.extend(import_result.errors)
