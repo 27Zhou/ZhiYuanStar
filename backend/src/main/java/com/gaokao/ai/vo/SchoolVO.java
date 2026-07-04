@@ -54,13 +54,13 @@ public class SchoolVO implements Serializable {
     private String natureName;
 
     @Schema(description = "是否985")
-    private Integer is985;
+    private Boolean is985;
 
     @Schema(description = "是否211")
-    private Integer is211;
+    private Boolean is211;
 
     @Schema(description = "是否双一流")
-    private Integer isDoubleFirstClass;
+    private Boolean isDoubleFirstClass;
 
     @Schema(description = "校徽URL")
     private String logo;

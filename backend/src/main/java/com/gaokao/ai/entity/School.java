@@ -45,14 +45,17 @@ public class School implements Serializable {
     @Schema(description = "性质: 1-公办, 2-民办, 3-中外合作")
     private Integer nature;
 
-    @Schema(description = "是否985: 0-否, 1-是")
-    private Integer is985;
+    @TableField("is_985")
+    @Schema(description = "是否985")
+    private Boolean is985;
 
-    @Schema(description = "是否211: 0-否, 1-是")
-    private Integer is211;
+    @TableField("is_211")
+    @Schema(description = "是否211")
+    private Boolean is211;
 
-    @Schema(description = "是否双一流: 0-否, 1-是")
-    private Integer isDoubleFirstClass;
+    @TableField("is_double_first_class")
+    @Schema(description = "是否双一流")
+    private Boolean isDoubleFirstClass;
 
     @Schema(description = "官网地址")
     private String website;

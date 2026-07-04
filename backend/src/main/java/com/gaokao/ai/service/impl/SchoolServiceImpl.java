@@ -1,14 +1,11 @@
 package com.gaokao.ai.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gaokao.ai.common.PageResult;
-import com.gaokao.ai.entity.AdmissionScore;
-import com.gaokao.ai.entity.Major;
-import com.gaokao.ai.entity.School;
-import com.gaokao.ai.mapper.AdmissionScoreMapper;
-import com.gaokao.ai.mapper.MajorMapper;
-import com.gaokao.ai.mapper.SchoolMapper;
+import com.gaokao.ai.entity.*;
+import com.gaokao.ai.mapper.*;
 import com.gaokao.ai.service.SchoolService;
 import com.gaokao.ai.vo.SchoolDetailVO;
 import com.gaokao.ai.vo.SchoolVO;
@@ -31,6 +28,11 @@ public class SchoolServiceImpl implements SchoolService {
     private final SchoolMapper schoolMapper;
     private final AdmissionScoreMapper admissionScoreMapper;
     private final MajorMapper majorMapper;
+    private final SchoolMajorMapper schoolMajorMapper;
+    private final ProvinceMapper provinceMapper;
+
+    // Fix: 问题3 - 省份名称缓存Map，启动时加载
+    private Map<Integer, String> provinceNameMap;
 
     // 类型映射
     private static final Map<Integer, String> TYPE_MAP = Map.ofEntries(
@@ -48,6 +50,28 @@ public class SchoolServiceImpl implements SchoolService {
             1, "公办", 2, "民办", 3, "中外合作"
     );
 
+    /**
+     * Fix: 问题3 - 获取省份名称映射（懒加载）
+     */
+    private Map<Integer, String> getProvinceNameMap() {
+        if (provinceNameMap == null) {
+            List<Province> provinces = provinceMapper.selectList(null);
+            provinceNameMap = new HashMap<>();
+            for (Province p : provinces) {
+                provinceNameMap.put(p.getId(), p.getName());
+            }
+        }
+        return provinceNameMap;
+    }
+
+    /**
+     * Fix: 问题3 - 根据省份ID获取省份名称
+     */
+    private String resolveProvinceName(Integer provinceId) {
+        if (provinceId == null) return null;
+        return getProvinceNameMap().getOrDefault(provinceId, "未知");
+    }
+
     @Override
     public PageResult<SchoolVO> searchSchools(
             String keyword, Integer provinceId, Integer type,
@@ -56,10 +80,8 @@ public class SchoolServiceImpl implements SchoolService {
             int pageNum, int pageSize,
             String sortField, String sortOrder) {
 
-        // 构建查询条件
         LambdaQueryWrapper<School> wrapper = new LambdaQueryWrapper<>();
 
-        // 关键词模糊查询
         if (StringUtils.hasText(keyword)) {
             wrapper.and(w -> w
                     .like(School::getName, keyword)
@@ -68,7 +90,6 @@ public class SchoolServiceImpl implements SchoolService {
             );
         }
 
-        // 精确筛选条件
         if (provinceId != null) {
             wrapper.eq(School::getProvinceId, provinceId);
         }
@@ -81,17 +102,17 @@ public class SchoolServiceImpl implements SchoolService {
         if (nature != null) {
             wrapper.eq(School::getNature, nature);
         }
+        // Fix: 问题4 - Boolean类型判断改为 true/false
         if (is985 != null && is985 == 1) {
-            wrapper.eq(School::getIs985, 1);
+            wrapper.eq(School::getIs985, true);
         }
         if (is211 != null && is211 == 1) {
-            wrapper.eq(School::getIs211, 1);
+            wrapper.eq(School::getIs211, true);
         }
         if (isDouble != null && isDouble == 1) {
-            wrapper.eq(School::getIsDoubleFirstClass, 1);
+            wrapper.eq(School::getIsDoubleFirstClass, true);
         }
 
-        // 排序
         if ("ranking".equals(sortField)) {
             if ("asc".equals(sortOrder)) {
                 wrapper.orderByAsc(School::getRanking);
@@ -102,11 +123,9 @@ public class SchoolServiceImpl implements SchoolService {
             wrapper.orderByAsc(School::getId);
         }
 
-        // 分页查询
         Page<School> page = new Page<>(pageNum, pageSize);
         Page<School> result = schoolMapper.selectPage(page, wrapper);
 
-        // 转换为VO
         List<SchoolVO> voList = result.getRecords().stream()
                 .map(this::toSchoolVO)
                 .collect(Collectors.toList());
@@ -116,7 +135,6 @@ public class SchoolServiceImpl implements SchoolService {
 
     @Override
     public SchoolDetailVO getSchoolDetail(Long schoolId) {
-        // 查询学校基本信息
         School school = schoolMapper.selectById(schoolId);
         if (school == null) {
             return null;
@@ -128,28 +146,44 @@ public class SchoolServiceImpl implements SchoolService {
                 .orderByDesc(AdmissionScore::getYear);
         List<AdmissionScore> scores = admissionScoreMapper.selectList(scoreWrapper);
 
-        // 按年份分组
         Map<String, List<Map<String, Object>>> scoreMap = scores.stream()
                 .collect(Collectors.groupingBy(
                         s -> String.valueOf(s.getYear()),
                         Collectors.mapping(this::scoreToMap, Collectors.toList())
                 ));
 
-        // 查询开设专业
-        LambdaQueryWrapper<Major> majorWrapper = new LambdaQueryWrapper<>();
-        majorWrapper.eq(Major::getStatus, 1).orderByAsc(Major::getCode);
-        List<Major> majors = majorMapper.selectList(majorWrapper);
-        List<Map<String, Object>> majorList = majors.stream()
-                .map(this::majorToMap)
-                .collect(Collectors.toList());
+        // Fix: 问题1 - 通过school_major关联表查询该学校的专业
+        List<Map<String, Object>> majorList = new ArrayList<>();
+        try {
+            LambdaQueryWrapper<SchoolMajor> smWrapper = new LambdaQueryWrapper<>();
+            smWrapper.eq(SchoolMajor::getSchoolId, schoolId);
+            List<SchoolMajor> schoolMajors = schoolMajorMapper.selectList(smWrapper);
 
-        // 构建详情VO
+            if (!schoolMajors.isEmpty()) {
+                List<Long> majorIds = schoolMajors.stream()
+                        .map(SchoolMajor::getMajorId)
+                        .collect(Collectors.toList());
+
+                LambdaQueryWrapper<Major> majorWrapper = new LambdaQueryWrapper<>();
+                majorWrapper.in(Major::getId, majorIds)
+                        .eq(Major::getStatus, 1)
+                        .orderByAsc(Major::getCode);
+                List<Major> majors = majorMapper.selectList(majorWrapper);
+
+                majorList = majors.stream()
+                        .map(this::majorToMap)
+                        .collect(Collectors.toList());
+            }
+        } catch (Exception e) {
+            log.warn("查询学校专业失败: schoolId={}", schoolId, e);
+        }
+
         return SchoolDetailVO.builder()
                 .id(school.getId())
                 .name(school.getName())
                 .code(school.getCode())
                 .provinceId(school.getProvinceId())
-                .provinceName(null) // 需要关联查询
+                .provinceName(resolveProvinceName(school.getProvinceId()))
                 .cityName(null)
                 .address(school.getAddress())
                 .type(school.getType())
@@ -176,8 +210,43 @@ public class SchoolServiceImpl implements SchoolService {
     public Map<String, Object> getStatistics() {
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalSchools", schoolMapper.selectCount(null));
-        stats.put("byProvince", schoolMapper.countByProvince());
-        stats.put("byType", schoolMapper.countByType());
+
+        // Fix: 问题2 - 使用QueryWrapper支持原生SQL分组统计
+        // 按省份统计
+        QueryWrapper<School> provinceWrapper = new QueryWrapper<>();
+        provinceWrapper.select("province_id", "count(*) as count")
+                .eq("deleted", 0)
+                .groupBy("province_id");
+        List<Map<String, Object>> byProvince = schoolMapper.selectMaps(provinceWrapper);
+
+        // 补充省份名称
+        Map<Integer, String> pMap = getProvinceNameMap();
+        for (Map<String, Object> item : byProvince) {
+            Object pidObj = item.get("province_id");
+            if (pidObj != null) {
+                Integer pid = Integer.parseInt(pidObj.toString());
+                item.put("provinceName", pMap.getOrDefault(pid, "未知"));
+            }
+        }
+        stats.put("byProvince", byProvince);
+
+        // 按类型统计
+        QueryWrapper<School> typeWrapper = new QueryWrapper<>();
+        typeWrapper.select("type", "count(*) as count")
+                .eq("deleted", 0)
+                .groupBy("type");
+        List<Map<String, Object>> byType = schoolMapper.selectMaps(typeWrapper);
+
+        // 补充类型名称
+        for (Map<String, Object> item : byType) {
+            Object typeObj = item.get("type");
+            if (typeObj != null) {
+                Integer t = Integer.parseInt(typeObj.toString());
+                item.put("typeName", TYPE_MAP.getOrDefault(t, "未知"));
+            }
+        }
+        stats.put("byType", byType);
+
         return stats;
     }
 
@@ -189,7 +258,7 @@ public class SchoolServiceImpl implements SchoolService {
                 .id(school.getId())
                 .name(school.getName())
                 .code(school.getCode())
-                .provinceName(null)
+                .provinceName(resolveProvinceName(school.getProvinceId()))
                 .cityName(null)
                 .type(school.getType())
                 .typeName(TYPE_MAP.getOrDefault(school.getType(), "未知"))
@@ -206,9 +275,6 @@ public class SchoolServiceImpl implements SchoolService {
                 .build();
     }
 
-    /**
-     * AdmissionScore -> Map
-     */
     private Map<String, Object> scoreToMap(AdmissionScore score) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", score.getId());
@@ -225,9 +291,6 @@ public class SchoolServiceImpl implements SchoolService {
         return map;
     }
 
-    /**
-     * Major -> Map
-     */
     private Map<String, Object> majorToMap(Major major) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", major.getId());
