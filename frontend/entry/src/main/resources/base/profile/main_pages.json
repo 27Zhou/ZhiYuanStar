@@ -1,0 +1,14 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/Login",
+    "pages/SchoolList",
+    "pages/SchoolDetail",
+    "pages/Recommend",
+    "pages/Assessment",
+    "pages/Profile",
+    "pages/Favorites",
+    "pages/VolunteerPlan",
+    "pages/History"
+  ]
+}

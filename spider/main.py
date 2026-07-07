@@ -59,7 +59,7 @@ def read_file(file_path: str) -> list:
 
     if suffix == ".csv":
         csv_reader = CSVReader()
-        return csv_reader.read_with_fallback(file_path)
+        return csv_reader.read(file_path, encoding="utf-8")
     elif suffix in (".xlsx", ".xls"):
         excel_reader = ExcelReader()
         return excel_reader.read(file_path)
